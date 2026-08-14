@@ -1,10 +1,17 @@
+import { useEffect, useState } from "react";
+
 import type { Task } from "./types/task";
-type TaskFilter = "all" | "active" | "completed";
+import type { TaskFilter as TaskFilterType } from "./types/filter";
 
 import "./App.css";
+
 import TaskList from "./components/TaskList";
-import { useState } from "react";
 import TaskForm from "./components/TaskForm";
+import TaskStats from "./components/TaskStats";
+import TaskFilter from "./components/TaskFilterButtons";
+import TaskSearch from "./components/TaskSearch";
+
+import { getTaskStats } from "./utils/taskStats";
 
 function App() {
   const initialTasks: Task[] = [
@@ -25,10 +32,27 @@ function App() {
     },
   ];
 
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    const savedTasks = localStorage.getItem("tasks");
+
+    if (savedTasks) {
+      return JSON.parse(savedTasks);
+    }
+
+    return initialTasks;
+  });
+
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
 
-  const [filter, setFilter] = useState<TaskFilter>("all");
+  const [filter, setFilter] = useState<TaskFilterType>("all");
+
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+  }, [tasks]);
+
+  const { total, active, completed } = getTaskStats(tasks);
 
   const handleToggle = (id: number) => {
     setTasks((currentTasks) =>
@@ -68,6 +92,7 @@ function App() {
         task.id === editingTaskId ? { ...task, title: newTitle } : task,
       ),
     );
+
     setEditingTaskId(null);
   };
 
@@ -76,20 +101,20 @@ function App() {
   };
 
   const filteredTasks = tasks.filter((task) => {
+    const matchesSearch = task.title
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
     if (filter === "active") {
-      return !task.completed;
+      return !task.completed && matchesSearch;
     }
 
     if (filter === "completed") {
-      return task.completed;
+      return task.completed && matchesSearch;
     }
 
-    return true;
+    return matchesSearch;
   });
-
-  const allCount = tasks.length;
-
-  const activeCount = tasks.filter((task) => !task.completed).length;
 
   return (
     <>
@@ -103,20 +128,28 @@ function App() {
         onCancel={handleCancelEdit}
       />
 
-      <div>
-        <button onClick={() => setFilter("all")}>All ({allCount}) </button>
-        <button onClick={() => setFilter("active")}>Active ({allCount})</button>
-        <button onClick={() => setFilter("completed")}>
-          Completed ({allCount})
-        </button>
-      </div>
+      <TaskStats total={total} active={active} completed={completed} />
 
-      <TaskList
-        tasks={filteredTasks}
-        onDelete={handleDelete}
-        onToggle={handleToggle}
-        onEdit={handleEdit}
+      <TaskFilter
+        filter={filter}
+        allCount={total}
+        activeCount={active}
+        completedCount={completed}
+        onFilterChange={setFilter}
       />
+
+      <TaskSearch search={search} onSearchChange={setSearch} />
+
+      {filteredTasks.length === 0 ? (
+        <p>No tasks found.</p>
+      ) : (
+        <TaskList
+          tasks={filteredTasks}
+          onDelete={handleDelete}
+          onToggle={handleToggle}
+          onEdit={handleEdit}
+        />
+      )}
     </>
   );
 }
